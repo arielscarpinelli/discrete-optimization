@@ -2,8 +2,10 @@
 # -*- coding: utf-8 -*-
 
 from ortools.constraint_solver import pywrapcp
+import networkx as nx
 
-def cp_solve(edges, node_count, max_allowed_colors, timeout):
+
+def cp_solve(edges, node_count, cliques, max_allowed_colors, timeout):
     solver = pywrapcp.Solver('CP is fun!');
 
     print "solving with " + str(max_allowed_colors) + " colors"
@@ -18,6 +20,9 @@ def cp_solve(edges, node_count, max_allowed_colors, timeout):
 
     for i in range(2, node_count):
         solver.Add(nodes[i] <= solver.Max(nodes[:i]) + 1)
+        
+    for clique in cliques:
+	    solver.Add(solver.AllDifferent([nodes[node] for node in clique]))
 
     max_color = solver.Max(nodes).Var()
     
@@ -50,6 +55,14 @@ def cp_solve(edges, node_count, max_allowed_colors, timeout):
 
                            
     return solution
+    
+def find_cliques(node_count, edges):
+    print "finding cliques"
+    G = nx.Graph()
+    nodes = range(node_count)
+    G.add_nodes_from(nodes);
+    G.add_edges_from(edges);
+    return [clique for clique in nx.find_cliques(G) if len(clique) > 2]
 
 def solve_it(input_data):
     # Modify this code to run your optimization algorithm
@@ -66,8 +79,13 @@ def solve_it(input_data):
         line = lines[i]
         parts = line.split()
         edges.append((int(parts[0]), int(parts[1])))
+        
+    cliques = find_cliques(node_count, edges)
     
-    solution = cp_solve(edges, node_count, 95, 10 * 60 * 1000)
+    solution = [node_count]
+    
+    for lap in range(2):
+        solution = cp_solve(edges, node_count, cliques, max(solution), 10 * 60 * 1000)
 
     color_count = max(solution) + 1
     
