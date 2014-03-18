@@ -3,6 +3,54 @@
 
 from ortools.constraint_solver import pywrapcp
 
+def cp_solve(edges, node_count, max_allowed_colors, timeout):
+    solver = pywrapcp.Solver('CP is fun!');
+
+    print "solving with " + str(max_allowed_colors) + " colors"
+
+    nodes = [solver.IntVar(0, max_allowed_colors-1, "node[%i]" %i) for i in range(node_count)]
+
+    for edge in edges:
+        solver.Add ( nodes[edge[0]] != nodes[edge[1]] )
+
+    solver.Add(nodes[0] == 0)
+    solver.Add(nodes[1] <= 1)
+
+    for i in range(2, node_count):
+        solver.Add(nodes[i] <= solver.Max(nodes[:i]) + 1)
+
+    max_color = solver.Max(nodes).Var()
+    
+    objective = solver.Minimize(max_color, 1)
+
+    #
+    # solution and search
+    #
+    solution = solver.Assignment()
+    solution.Add(nodes)
+    solution.Add(max_color)
+                           
+    db = solver.Phase(nodes,
+        solver.CHOOSE_MIN_SIZE_LOWEST_MAX,
+        #solver.CHOOSE_FIRST_UNBOUND,
+        solver.ASSIGN_MIN_VALUE)
+                           
+    solver.NewSearch(db, [objective, solver.TimeLimit(timeout)])
+    
+    solver.NextSolution()
+    
+    solution = [node.Value() for node in nodes]
+    
+    solver.EndSearch()
+    
+    print "failures:", solver.Failures()
+    print "branches:", solver.Branches()
+    print "WallTime:", solver.WallTime()
+
+
+                           
+    return solution
+
 def solve_it(input_data):
     # Modify this code to run your optimization algorithm
 
@@ -19,33 +67,10 @@ def solve_it(input_data):
         parts = line.split()
         edges.append((int(parts[0]), int(parts[1])))
     
-    
-    solver = pywrapcp.Solver('CP is fun!');
+    solution = cp_solve(edges, node_count, 95, 10 * 60 * 1000)
 
-    nodes = [solver.IntVar(0, node_count, "node[%i]" %i) for i in range(node_count)]
-
-    for edge in edges:
-        solver.Add ( nodes[edge[0]] != nodes[edge[1]] )
-
-
-    #
-    # solution and search
-    #
-    solution = solver.Assignment()
-    solution.Add(nodes)
-                           
-    db = solver.Phase(nodes,
-        solver.CHOOSE_FIRST_UNBOUND,
-        solver.ASSIGN_MIN_VALUE)
-                           
-    solver.NewSearch(db)
+    color_count = max(solution) + 1
     
-    solver.NextSolution()
-    
-    solution = [node.Value() for node in nodes]
-    
-    color_count = max(solution)+1
-                               
     # prepare the solution in the specified output format
     output_data = str(color_count) + ' ' + str(1) + '\n'
     output_data += ' '.join(map(str, solution))
