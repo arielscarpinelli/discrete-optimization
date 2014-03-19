@@ -3,6 +3,8 @@
 
 from ortools.constraint_solver import pywrapcp
 import networkx as nx
+import networkx.algorithms.approximation as apxa
+import time
 
 
 def cp_solve(edges, node_count, cliques, max_allowed_colors, timeout):
@@ -15,32 +17,24 @@ def cp_solve(edges, node_count, cliques, max_allowed_colors, timeout):
     for edge in edges:
         solver.Add ( nodes[edge[0]] != nodes[edge[1]] )
 
-    solver.Add(nodes[0] == 0)
-    solver.Add(nodes[1] <= 1)
-
-    for i in range(2, node_count):
-        solver.Add(nodes[i] <= solver.Max(nodes[:i]) + 1)
+    for i in range(0, node_count):
+        solver.Add(nodes[i] <= i)
         
     for clique in cliques:
 	    solver.Add(solver.AllDifferent([nodes[node] for node in clique]))
-
-    max_color = solver.Max(nodes).Var()
-    
-    objective = solver.Minimize(max_color, 1)
 
     #
     # solution and search
     #
     solution = solver.Assignment()
     solution.Add(nodes)
-    solution.Add(max_color)
                            
     db = solver.Phase(nodes,
         solver.CHOOSE_MIN_SIZE_LOWEST_MAX,
         #solver.CHOOSE_FIRST_UNBOUND,
         solver.ASSIGN_MIN_VALUE)
                            
-    solver.NewSearch(db, [objective, solver.TimeLimit(timeout)])
+    solver.NewSearch(db, [solver.TimeLimit(timeout)])
     
     solver.NextSolution()
     
@@ -62,7 +56,17 @@ def find_cliques(node_count, edges):
     nodes = range(node_count)
     G.add_nodes_from(nodes);
     G.add_edges_from(edges);
-    return [clique for clique in nx.find_cliques(G) if len(clique) > 2]
+    cliques = [sorted(apxa.max_clique(G))]
+    #clique_generator = nx.find_cliques(G);
+    #start = time.clock();
+    #while(time.clock() < start + 10 and len(cliques) < 100):
+    #    clique = sorted(clique_generator.next())
+    #    if(len(clique) > 2):
+    #        cliques.append(clique)
+
+    print "cliques:"
+    print cliques
+    return cliques #clique for clique in  if len(clique) > 2]
 
 def solve_it(input_data):
     # Modify this code to run your optimization algorithm
@@ -84,8 +88,8 @@ def solve_it(input_data):
     
     solution = [node_count]
     
-    for lap in range(2):
-        solution = cp_solve(edges, node_count, cliques, max(solution), 10 * 60 * 1000)
+    for lap in range(4):
+        solution = cp_solve(edges, node_count, cliques, max(solution), 20 * 1000)
 
     color_count = max(solution) + 1
     
