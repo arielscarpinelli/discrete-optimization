@@ -7,7 +7,7 @@ import networkx.algorithms.approximation as apxa
 import time
 
 
-def cp_solve(edges, node_count, max_clique, max_allowed_colors, timeout):
+def cp_solve(edges, node_count, cliques, presets, max_allowed_colors, timeout):
     solver = pywrapcp.Solver('CP is fun!');
 
     print "solving with " + str(max_allowed_colors) + " colors"
@@ -17,13 +17,16 @@ def cp_solve(edges, node_count, max_clique, max_allowed_colors, timeout):
     for edge in edges:
         solver.Add ( nodes[edge[0]] != nodes[edge[1]] )
 
-    solver.Add(nodes[0] == 0)
-    solver.Add(nodes[1] <= 1)
+    #for i in range(node_count):
+    #  for j in range(i+1, node_count):
+    #    solver.Add(nodes[i] <= nodes[j])
 
-    for i in range(2, node_count):
-        solver.Add(nodes[i] <= solver.Max(nodes[:i]) + 1)
+    for (node, value) in presets:
+        solver.Add(nodes[node] == value)
         
-	solver.Add(solver.AllDifferent([nodes[node] for node in max_clique]))
+
+    for clique in cliques:
+	    solver.Add(solver.AllDifferent([nodes[node] for node in clique]))
 
     #
     # solution and search
@@ -59,6 +62,35 @@ def get_graph(node_count, edges):
     G.add_edges_from(edges);
     return G
 
+
+def preset(node, neighbors, presets):
+    if not node in presets:
+        values = sorted([presets[n] for n in neighbors if n in presets])
+        value = 0
+        if len(values) > 0:
+            values = values + [max(values)+2] # last item is the forced max value +2
+            for i in range(len(values)): # find an "emtpy slot"
+                if values[i+1] - values[i] > 1:
+                    value = values[i] + 1
+                    break
+        presets[node] = value
+
+def preset_most_connected(G, limit):
+    degrees = [(node, nx.degree(G, node)) for node in G]    
+    degrees = sorted(degrees, key=lambda t: -t[1])
+    most_connected = degrees[:limit]
+    
+    presets = {}
+
+    for (node, degree) in most_connected:
+        neighbors = [n for n in G[node]]
+        preset(node, neighbors, presets)
+    
+    return [(node, presets[node]) for node in presets]
+
+def cliques_for_nodes(G, nodes):
+    return [apxa.max_clique(G)]
+
 def solve_it(input_data):
     # Modify this code to run your optimization algorithm
 
@@ -77,14 +109,16 @@ def solve_it(input_data):
         
     G = get_graph(node_count, edges)
     
-    degrees = [(node, nx.degree(G, node)) for node in G]
-    
-    print degrees
-    
+    presets = preset_most_connected(G, 12)
+    print presets
+
+    cliques = cliques_for_nodes(G, [preset[0] for preset in presets])
+    print cliques
+
     solution = [node_count]
     
-    for lap in range(4):
-        solution = cp_solve(edges, node_count, sorted(apxa.max_clique(G)), max(solution), 20 * 1000)
+    for lap in range(2):
+        solution = cp_solve(edges, node_count, cliques, presets, max(solution), 20 * 1000)
 
     color_count = max(solution) + 1
     
