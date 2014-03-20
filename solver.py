@@ -7,7 +7,7 @@ import networkx.algorithms.approximation as apxa
 import time
 
 
-def cp_solve(edges, node_count, cliques, max_allowed_colors, timeout):
+def cp_solve(edges, node_count, max_clique, max_allowed_colors, timeout):
     solver = pywrapcp.Solver('CP is fun!');
 
     print "solving with " + str(max_allowed_colors) + " colors"
@@ -17,11 +17,13 @@ def cp_solve(edges, node_count, cliques, max_allowed_colors, timeout):
     for edge in edges:
         solver.Add ( nodes[edge[0]] != nodes[edge[1]] )
 
-    for i in range(0, node_count):
-        solver.Add(nodes[i] <= i)
+    solver.Add(nodes[0] == 0)
+    solver.Add(nodes[1] <= 1)
+
+    for i in range(2, node_count):
+        solver.Add(nodes[i] <= solver.Max(nodes[:i]) + 1)
         
-    for clique in cliques:
-	    solver.Add(solver.AllDifferent([nodes[node] for node in clique]))
+	solver.Add(solver.AllDifferent([nodes[node] for node in max_clique]))
 
     #
     # solution and search
@@ -49,24 +51,13 @@ def cp_solve(edges, node_count, cliques, max_allowed_colors, timeout):
 
                            
     return solution
-    
-def find_cliques(node_count, edges):
-    print "finding cliques"
+
+def get_graph(node_count, edges):
     G = nx.Graph()
     nodes = range(node_count)
     G.add_nodes_from(nodes);
     G.add_edges_from(edges);
-    cliques = [sorted(apxa.max_clique(G))]
-    #clique_generator = nx.find_cliques(G);
-    #start = time.clock();
-    #while(time.clock() < start + 10 and len(cliques) < 100):
-    #    clique = sorted(clique_generator.next())
-    #    if(len(clique) > 2):
-    #        cliques.append(clique)
-
-    print "cliques:"
-    print cliques
-    return cliques #clique for clique in  if len(clique) > 2]
+    return G
 
 def solve_it(input_data):
     # Modify this code to run your optimization algorithm
@@ -84,12 +75,16 @@ def solve_it(input_data):
         parts = line.split()
         edges.append((int(parts[0]), int(parts[1])))
         
-    cliques = find_cliques(node_count, edges)
+    G = get_graph(node_count, edges)
+    
+    degrees = [(node, nx.degree(G, node)) for node in G]
+    
+    print degrees
     
     solution = [node_count]
     
     for lap in range(4):
-        solution = cp_solve(edges, node_count, cliques, max(solution), 20 * 1000)
+        solution = cp_solve(edges, node_count, sorted(apxa.max_clique(G)), max(solution), 20 * 1000)
 
     color_count = max(solution) + 1
     
