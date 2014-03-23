@@ -7,53 +7,79 @@ import networkx.algorithms.approximation as apxa
 import time
 
 
+def remap(nodes):
+    color_map = {}
+    current_color = -1
+    result = []
+    
+    for node_color in nodes:
+    	if not node_color in color_map:
+    		current_color = current_color + 1
+    		color_map[node_color] = current_color
+    	result.append(color_map[node_color])
+    
+    return result
+
+
 def cp_solve(edges, node_count, cliques, presets, max_allowed_colors, timeout):
     solver = pywrapcp.Solver('CP is fun!');
 
     print "solving with " + str(max_allowed_colors) + " colors"
 
-    nodes = [solver.IntVar(0, max_allowed_colors-1, "node[%i]" %i) for i in range(node_count)]
+    colors = range(max_allowed_colors)
+    nodes = range(node_count)
+    nodes_colors = [[solver.BoolVar() for color in colors] for node in nodes]
+    nodes_values = [solver.ScalProd(nodes_colors[node], colors) for node in nodes]
+    variables = [nodes_colors[node][color] for node in nodes for color in colors]
 
+    for node in nodes:
+        solver.Add ( solver.Sum(nodes_colors[node]) == 1 ) # one color per node
+    
     for edge in edges:
-        solver.Add ( nodes[edge[0]] != nodes[edge[1]] )
-
-    #for i in range(node_count):
-    #  for j in range(i+1, node_count):
-    #    solver.Add(nodes[i] <= nodes[j])
+        solver.Add ( nodes_values[edge[0]] != nodes_values[edge[1]] ) # Different colors
 
     for (node, value) in presets:
-        solver.Add(nodes[node] == value)
-        
+        for color in colors:
+            solver.Add(nodes_colors[node][color] == (color == value))
 
     for clique in cliques:
-	    solver.Add(solver.AllDifferent([nodes[node] for node in clique]))
+	    solver.Add(solver.AllDifferent([nodes_values[node] for node in clique]))
+	    
+    solver.Add ( nodes_values[edge[0]] != nodes_values[edge[1]] ) # Different colors
+    
+    solver.Add ( solver.Sum(variables) == node_count ) # one color per node
+
+
+#    cost = solver.Sum([])
+
+#    objective = solver.Minimize(cost, 1)
 
     #
     # solution and search
     #
     solution = solver.Assignment()
-    solution.Add(nodes)
+    solution.Add(variables)
                            
-    db = solver.Phase(nodes,
-        solver.CHOOSE_MIN_SIZE_LOWEST_MAX,
-        #solver.CHOOSE_FIRST_UNBOUND,
-        solver.ASSIGN_MIN_VALUE)
-                           
+    db = solver.Phase(variables,
+        #solver.CHOOSE_MIN_SIZE_LOWEST_MAX,
+        solver.CHOOSE_FIRST_UNBOUND,
+        solver.ASSIGN_MAX_VALUE)
+    
+    print "starting search"
+    
     solver.NewSearch(db, [solver.TimeLimit(timeout)])
     
     solver.NextSolution()
     
-    solution = [node.Value() for node in nodes]
+    solution = [sum([color for color in colors if node_colors[color].Value()]) for node_colors in nodes_colors]
     
     solver.EndSearch()
     
     print "failures:", solver.Failures()
     print "branches:", solver.Branches()
     print "WallTime:", solver.WallTime()
-
-
                            
-    return solution
+    return remap(solution)
 
 def get_graph(node_count, edges):
     G = nx.Graph()
@@ -117,7 +143,7 @@ def solve_it(input_data):
 
     solution = [node_count]
     
-    for lap in range(2):
+    for lap in range(5):
         solution = cp_solve(edges, node_count, cliques, presets, max(solution), 20 * 1000)
 
     color_count = max(solution) + 1
