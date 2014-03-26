@@ -1,2 +1,4 @@
-*.pyc
-userinfo
+*/*.pyc
+*/_userinfo
+*/*~
+*/*.DS_Store
