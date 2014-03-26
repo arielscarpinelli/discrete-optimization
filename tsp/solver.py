@@ -7,29 +7,41 @@ from ortools.constraint_solver import pywrapcp
 
 Point = namedtuple("Point", ['x', 'y'])
 
-def length(point1, point2):
-    return math.sqrt((point1.x - point2.x)**2 + (point1.y - point2.y)**2)
+class LengthMatrix:
+    
+    def __init__(self, points):
+        self._points = points
+        l = len(points)
+        self._lengths = [-1 for i in range(l*(l+1)/2)]
+
+    def _length(self, i,j):
+        return math.sqrt((self._points[i].x - self._points[j].x)**2 + (self._points[i].y - self._points[j].y)**2) * 100
+
+    def get(self, i, j):
+        if (j > i):
+            i,j = j,i
+        k = (i * (i + 1) / 2) + j        
+        l = self._lengths[k]
+        if l < 0:
+            l = self._length(i,j)
+            self._lengths[k] = l
+        return l
+
 
 def length_matrix(points, nodeCount):
     return [[length(points[i], points[j]) for i in range(nodeCount)] for j in range(nodeCount)]
 
-def solve_routing(points, nodeCount):
+def solve_routing(lengthMatrix, nodeCount):
 
     routing = pywrapcp.RoutingModel(nodeCount, 1)
 
     parameters = pywrapcp.RoutingSearchParameters()
     # Setting first solution heuristic (cheapest addition).
-    parameters.first_solution = 'PathCheapestArc'
-    # Disabling Large Neighborhood Search, comment out to activate it.
-    parameters.no_lns = True
-    parameters.routing_no_tsp = False
-    parameters.routing_time_limit = 60000
+    parameters.first_solution = 'LocalCheapestArc'
+    parameters.time_limit = 1
+    #parameters.guided_local_search = True
 
-
-
-    #lengths = length_matrix(points, nodeCount)
-
-    cost = lambda i,j: length(points[i],points[j])#lengths[i][j]
+    cost = lambda i,j: lengthMatrix.get(i,j)
 
     routing.SetCost(cost)
 
@@ -60,15 +72,17 @@ def solve_it(input_data):
 
     # build a trivial solution
     # visit the nodes in the order they appear in the file
-    (obj, solution) = solve_routing(points, nodeCount)
+    lm = LengthMatrix(points)
+    (obj, solution) = solve_routing(lm, nodeCount)
 
-    # calculate the length of the tour
-    #obj = lengths[solution[-1]][solution[0]]
-    #for index in range(0, nodeCount-1):
-    #    obj += lengths[solution[index]][solution[index+1]]
+    obj2 = lm._length(solution[-1],solution[0])
+    for index in range(0, nodeCount-1):
+        obj2 += lm._length(solution[index],solution[index+1])
+        
+    print obj2/100
 
     # prepare the solution in the specified output format
-    output_data = str(obj) + ' ' + str(1) + '\n'
+    output_data = str(obj/100) + ' ' + str(1) + '\n'
     output_data += ' '.join(map(str, solution))
 
     return output_data

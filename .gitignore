@@ -1,4 +1,4 @@
 */*.pyc
 */_userinfo
 */*~
-*/*.DS_Store
+.DS_Store
