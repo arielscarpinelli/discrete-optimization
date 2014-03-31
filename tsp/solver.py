@@ -45,8 +45,12 @@ def solve_clustered(points, nodeCount):
         solution = []
 
         for cluster in clusters:
-            (objective, sol) = solve_routing(cluster, len(cluster))
-            solution.extend(cluster[i] for i in sol)
+            l = len(cluster)
+            if l > 0:
+                (objective, sol) = solve_routing(cluster, l)
+                sol = [cluster[i] for i in sol]
+                # shift the subsolution to minimize the distance with the current
+                solution.extend(sol)
 
     return (LengthMatrix(points).obj(solution), solution)
 
