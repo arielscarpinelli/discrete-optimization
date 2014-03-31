@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 from ortools.constraint_solver import pywrapcp
+from ortools.linear_solver import pywraplp
 import networkx as nx
 import networkx.algorithms.approximation as apxa
 import time
@@ -22,61 +23,70 @@ def remap(nodes):
 
 
 def cp_solve(edges, node_count, cliques, presets, max_allowed_colors, timeout):
-    solver = pywrapcp.Solver('CP is fun!');
+    solver = pywraplp.Solver('CP is fun!', pywraplp.Solver.CBC_MIXED_INTEGER_PROGRAMMING);
+# GLPK_MIXED_INTEGER_PROGRAMMING
+# CBC_MIXED_INTEGER_PROGRAMMING
+# SCIP_MIXED_INTEGER_PROGRAMMING
 
     print "solving with " + str(max_allowed_colors) + " colors"
 
     colors = range(max_allowed_colors)
     nodes = range(node_count)
-    nodes_colors = [[solver.BoolVar() for color in colors] for node in nodes]
-    nodes_values = [solver.ScalProd(nodes_colors[node], colors) for node in nodes]
+    nodes_colors = [[solver.BoolVar('n%s_c%s' % (node,color)) for color in colors] for node in nodes]
     variables = [nodes_colors[node][color] for node in nodes for color in colors]
 
     for node in nodes:
         solver.Add ( solver.Sum(nodes_colors[node]) == 1 ) # one color per node
     
     for edge in edges:
-        solver.Add ( nodes_values[edge[0]] != nodes_values[edge[1]] ) # Different colors
+        print edge
+        for color in colors:
+            solver.Add ( nodes_colors[edge[0]][color] + nodes_colors[edge[1]][color] <= 1  ) # Different colors
 
     for (node, value) in presets:
         for color in colors:
             solver.Add(nodes_colors[node][color] == (color == value))
 
-    for clique in cliques:
-	    solver.Add(solver.AllDifferent([nodes_values[node] for node in clique]))
+    #for clique in cliques:
+	#    solver.Add(solver.AllDifferent([nodes_values[node] for node in clique]))
 	    
-    solver.Add ( nodes_values[edge[0]] != nodes_values[edge[1]] ) # Different colors
-    
     solver.Add ( solver.Sum(variables) == node_count ) # one color per node
 
-
-#    cost = solver.Sum([])
-
-#    objective = solver.Minimize(cost, 1)
+    objective = solver.Objective()
+    for node in nodes:
+        for color in colors:
+            objective.SetCoefficient(nodes_colors[node][color], color+1)
 
     #
     # solution and search
     #
-    solution = solver.Assignment()
-    solution.Add(variables)
-                           
-    db = solver.Phase(variables,
-        #solver.CHOOSE_MIN_SIZE_LOWEST_MAX,
-        solver.CHOOSE_FIRST_UNBOUND,
-        solver.ASSIGN_MAX_VALUE)
-    
+
     print "starting search"
+
+    solver.SetTimeLimit(timeout)
+    result_status = solver.Solve()
+    assert result_status == pywraplp.Solver.OPTIMAL
+    solution = [sum([color if nodes_colors[node][color].SolutionValue() > 0 else 0 for color in colors]) for node in nodes]
+
+    #solution = solver.Assignment()
+    #solution.Add(variables)
+                           
+    #db = solver.Phase(variables,
+        #solver.CHOOSE_MIN_SIZE_LOWEST_MAX,
+    #    solver.CHOOSE_FIRST_UNBOUND,
+    #    solver.ASSIGN_MAX_VALUE)
     
-    solver.NewSearch(db, [solver.TimeLimit(timeout)])
     
-    solver.NextSolution()
+    #solver.NewSearch(db, [solver.TimeLimit(timeout)])
     
-    solution = [sum([color for color in colors if node_colors[color].Value()]) for node_colors in nodes_colors]
+    #solver.NextSolution()
     
-    solver.EndSearch()
+    #solution = [sum([color for color in colors if node_colors[color].Value()]) for node_colors in nodes_colors]
     
-    print "failures:", solver.Failures()
-    print "branches:", solver.Branches()
+    #solver.EndSearch()
+    
+    #print "failures:", solver.Failures()
+    #print "branches:", solver.Branches()
     print "WallTime:", solver.WallTime()
                            
     return remap(solution)
@@ -101,9 +111,13 @@ def preset(node, neighbors, presets):
                     break
         presets[node] = value
 
-def preset_most_connected(G, limit):
+def sorted_by_degree(G):
     degrees = [(node, nx.degree(G, node)) for node in G]    
     degrees = sorted(degrees, key=lambda t: -t[1])
+    return degrees
+
+def preset_most_connected(G, limit):
+    degrees = sorted_by_degree(G)
     most_connected = degrees[:limit]
     
     presets = {}
@@ -116,6 +130,31 @@ def preset_most_connected(G, limit):
 
 def cliques_for_nodes(G, nodes):
     return [apxa.max_clique(G)]
+
+def super_greedy(G):
+    degrees = sorted_by_degree(G)
+
+    tabu = set()
+
+    nodes = len(degrees)
+
+    solution = [-1] * nodes
+    solved = 0
+
+    current_color = 0
+
+    while(solved < nodes):
+        print "color: ", current_color, "solved: ", solved
+        for (node, degree) in degrees:
+            if solution[node] == -1 and not node in tabu:
+                solution[node] = current_color
+                tabu |= set(G[node])
+                solved+=1
+        tabu = set()        
+        current_color+=1
+
+    return solution
+    
 
 def solve_it(input_data):
     # Modify this code to run your optimization algorithm
@@ -135,6 +174,8 @@ def solve_it(input_data):
         
     G = get_graph(node_count, edges)
     
+    #solution = super_greedy(G)
+
     presets = preset_most_connected(G, 12)
     print presets
 
@@ -145,6 +186,7 @@ def solve_it(input_data):
     
     for lap in range(5):
         solution = cp_solve(edges, node_count, cliques, presets, max(solution), 20 * 1000)
+        print solution
 
     color_count = max(solution) + 1
     
