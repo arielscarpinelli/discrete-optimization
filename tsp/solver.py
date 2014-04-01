@@ -20,7 +20,10 @@ class DistanceMatrix:
         #self._distances = array.array('I', [65535] * range(l*(l+1)/2))
 
     def _distance(self, i,j):
-        return math.sqrt((self._points[i].x - self._points[j].x)**2 + (self._points[i].y - self._points[j].y)**2) * 100
+        return self._distanceP(self._points[i], self._points[j])
+    
+    def _distanceP(p0, p1):
+        return math.sqrt((p0.x - p1.x)**2 + (p0.y - p1.y)**2) * 100
 
     def _distanceBuffered(self, i, j):
         if (j > i):
@@ -37,7 +40,7 @@ class DistanceMatrix:
 
 
     def obj(self, solution):
-        return sum([self.get(s[0].id,s[1].id) for s in segmentize(self._points)])
+        return sum([self._distanceP(s[0],s[1]) for s in segmentize(self._points)])
 
 def make_clusters(points):
     body = [[] for i in range(21)]
