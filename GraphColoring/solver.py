@@ -33,15 +33,20 @@ def cp_solve(edges, node_count, cliques, presets, max_allowed_colors, timeout):
     colors = range(max_allowed_colors)
     nodes = range(node_count)
     nodes_colors = [[solver.BoolVar('n%s_c%s' % (node,color)) for color in colors] for node in nodes]
-    variables = [nodes_colors[node][color] for node in nodes for color in colors]
+    obj = solver.IntVar(1, max_allowed_colors)
 
     for node in nodes:
-        solver.Add ( solver.Sum(nodes_colors[node]) == 1 ) # one color per node
+        node_colors = nodes_colors[node]
+        solver.Add ( solver.Sum(node_colors) == 1 ) # one color per node
+        for color in colors:
+            solver.Add( obj >= color*node_colors[color] )
     
     for edge in edges:
         print edge
+        left = nodes_colors[edge[0]]
+        right = nodes_colors[edge[1]]
         for color in colors:
-            solver.Add ( nodes_colors[edge[0]][color] + nodes_colors[edge[1]][color] <= 1  ) # Different colors
+            solver.Add ( left[color] + right[color] <= 1  ) # Different colors
 
     for (node, value) in presets:
         for color in colors:
@@ -50,12 +55,8 @@ def cp_solve(edges, node_count, cliques, presets, max_allowed_colors, timeout):
     #for clique in cliques:
 	#    solver.Add(solver.AllDifferent([nodes_values[node] for node in clique]))
 	    
-    solver.Add ( solver.Sum(variables) == node_count ) # one color per node
 
-    objective = solver.Objective()
-    for node in nodes:
-        for color in colors:
-            objective.SetCoefficient(nodes_colors[node][color], color+1)
+    objective = solver.Minimize(obj)
 
     #
     # solution and search
