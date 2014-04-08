@@ -188,18 +188,24 @@ def solve_routing(points, nodeCount):
     distanceMatrix = DistanceMatrix(points)
 
     routing = pywrapcp.RoutingModel(nodeCount, 1)
-    routing.UpdateTimeLimit(180000)
+    routing.UpdateTimeLimit(5 * 60000)
 
     parameters = pywrapcp.RoutingSearchParameters()
     # Setting first solution heuristic (cheapest addition).
-    parameters.first_solution = 'LocalCheapestArc'
+    parameters.first_solution = 'PathCheapestArc'
     #parameters.solution_limit = 10
     parameters.guided_local_search = True
     #parameters.simulated_annealing = True
+    #parameters.tabu_search = True
+    parameters.no_lns = True
+    
 
     cost = distanceMatrix.get
 
     routing.SetCost(cost)
+    
+    #search_log = routing.solver().SearchLog(10000000, routing.CostVar())
+    #routing.AddSearchMonitor(search_log)
 
     assignment = routing.SolveWithParameters(parameters, None)
 
@@ -291,7 +297,7 @@ def solve_it(input_data):
     # build a trivial solution
     # visit the nodes in the order they appear in the file
     print "calling solver"
-    (obj, solution) = solve_clustered(points, nodeCount)
+    (obj, solution) = solve_routing(points, nodeCount)
 
     print obj
          
