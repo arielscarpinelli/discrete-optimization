@@ -7,8 +7,8 @@ from ortools.constraint_solver import pywrapcp
 from ortools.linear_solver import pywraplp
 
 Point = namedtuple("Point", ['x', 'y'])
-Facility = namedtuple("Facility", ['index', 'setup_cost', 'capacity', 'location'])
-Customer = namedtuple("Customer", ['index', 'demand', 'location'])
+Facility = namedtuple("Facility", ['index', 'setup_cost', 'capacity', 'location', 'usage_variable', 'usage_constraint', 'capacity_constraint'])
+Customer = namedtuple("Customer", ['index', 'demand', 'location', 'facility_variables'])
 
 def length(point1, point2):
     return math.sqrt((point1.x - point2.x)**2 + (point1.y - point2.y)**2)
@@ -28,12 +28,12 @@ def solve_it(input_data):
     facilities = []
     for i in range(1, facility_count+1):
         parts = lines[i].split()
-        facilities.append(Facility(i-1, float(parts[0]), int(parts[1]), Point(float(parts[2]), float(parts[3])) ))
+        facilities.append(Facility(i-1, float(parts[0]), int(parts[1]), Point(float(parts[2]), float(parts[3])), None, None, None ))
 
     customers = []
     for i in range(facility_count+1, facility_count+1+customer_count):
         parts = lines[i].split()
-        customers.append(Customer(i-1-facility_count, int(parts[0]), Point(float(parts[1]), float(parts[2]))))
+        customers.append(Customer(i-1-facility_count, int(parts[0]), Point(float(parts[1]), float(parts[2])), []))
 
     solver = pywraplp.Solver('CP is fun!', pywraplp.Solver.CBC_MIXED_INTEGER_PROGRAMMING);
 # GLPK_MIXED_INTEGER_PROGRAMMING
@@ -42,44 +42,77 @@ def solve_it(input_data):
 
     print "creating variables"
 
-    f = [solver.BoolVar('f%d' % facility.index) for facility in facilities]
-
-    x = [[solver.IntVar(0, customer.demand, 'x%d_%d' % (customer.index,facility.index)) for customer in customers] for facility in facilities]
-    k = [[solver.BoolVar('k%d_%d' % (customer.index,facility.index)) for customer in customers] for facility in facilities]
-
     objective = solver.Objective()
-    for i in range(facility_count):
-        facility = facilities[i]
-        solver.Add ( solver.Sum(x[i]) <= M*f[i]  )
-        solver.Add ( solver.Sum(x[i]) <= facility.capacity)
-        objective.SetCoefficient(f[i], facility.setup_cost )
     
-    for i in range(customer_count):
-        column = [x[j][i] for j in range(facility_count)]
-        solver.Add ( solver.Sum(column) == customers[i].demand )
-        for j in range(facility_count):
-            solver.Add ( M*k[j][i] >= x[j][i] )
-            objective.SetCoefficient(k[j][i], length(facilities[j].location, customers[i].location))
+    f = []
+
+    total_demand = sum([customer.demand for customer in customers])
+    demand_constraint = solver.Constraint(total_demand, solver.Infinity())
+    total_capacity = 0
+	
+    for facility in facilities:
+
+    	capacity_constraint = solver.Constraint(0, facility.capacity)
+    	total_capacity = total_capacity + facility.capacity
+
+    	usage_variable = solver.BoolVar('f%d' % facility.index)
+        objective.SetCoefficient(usage_variable, facility.setup_cost )
+        demand_constraint.SetCoefficient(usage_variable, facility.capacity )
+
+    	usage_constraint = solver.Constraint(-solver.Infinity(), 0)
+    	usage_constraint.SetCoefficient(usage_variable, -M)
+    	
+    	f.append(Facility(facility.index, facility.setup_cost, facility.capacity, facility.location, usage_variable, usage_constraint, capacity_constraint))
+    	
+    facilities = f
+
+    print "demand  ", total_demand
+    print "capacity", total_capacity
+
+
+    variables = facility_count
+
+    for customer in customers:
+		facilities_distances = [(facility, length(customer.location, facility.location)) for facility in facilities]
+		
+		# aca cortar solo las mas cercanas
+		facilities_distances = sorted(facilities_distances, key=lambda tup: tup[1])
+		
+		max_cost = (facilities_distances[0][0].setup_cost + facilities_distances[0][1]) / 2
+		
+		customer_single_facility_constraint = solver.Constraint(1, 1)
+		for facility_distance in facilities_distances:
+			if facility_distance[1] <= max_cost:
+				facility = facility_distance[0]
+				variables = variables + 1
+				x = solver.BoolVar('x_%d_%d' % (facility.index, customer.index))
+				customer_single_facility_constraint.SetCoefficient(x, 1)
+				facility.usage_constraint.SetCoefficient(x, 1)
+				facility.capacity_constraint.SetCoefficient(x, customer.demand)
+				objective.SetCoefficient(x, facility_distance[1])
+				customer.facility_variables.append((facility, x))
 
     #
     # solution and search
     #
 
+    print "variables", variables
     print "starting search"
 
-    solver.SetTimeLimit(60000)
+    solver.SetTimeLimit(1 * 60 * 60 * 1000 - 5000)
     result_status = solver.Solve()
-    print result_status
-    assert result_status == pywraplp.Solver.OPTIMAL
     print "WallTime:", solver.WallTime()
+    print "Status:",result_status
+    assert (result_status == pywraplp.Solver.OPTIMAL) or (result_status == pywraplp.Solver.FEASIBLE)
 
 
     solution = [-1]*len(customers)
-
-    for i in range(facility_count):
-        for j in range(customer_count):
-            if x[i][j].SolutionValue() > 0:
-                solution[j] = i
+    
+    for customer in customers:
+    	for x in customer.facility_variables:
+            if x[1].SolutionValue() > 0:
+                solution[customer.index] = x[0].index
+    		
 
     # calculate the cost of the solution
     #obj = sum([f.setup_cost*used[f.index] for f in facilities])
@@ -89,6 +122,10 @@ def solve_it(input_data):
     # prepare the solution in the specified output format
     output_data = str(objective.Value()) + ' ' + str(1) + '\n'
     output_data += ' '.join(map(str, solution))
+
+    f = open("solution",'w')
+    f.write(output_data)
+    f.close()
 
     return output_data
 
@@ -103,9 +140,6 @@ if __name__ == '__main__':
         input_data_file.close()
         print 'Solving:', file_location
         solution = solve_it(input_data)
-        f = open("solution",'w')
-        f.write(solution)
-        f.close()
         print solution
     else:
         print 'This test requires an input file.  Please select one from the data directory. (i.e. python solver.py ./data/fl_16_2)'
