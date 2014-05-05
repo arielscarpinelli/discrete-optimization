@@ -148,7 +148,7 @@ def solve_default(customers, customer_count, vehicle_count, vehicle_capacity):
                 obj += length(vehicle_tour[i],vehicle_tour[i+1])
             obj += length(vehicle_tour[-1],depot)
 
-    vehicle_tours = [[customer.index for customer in tour] for tour in vehicle_tours]
+    vehicle_tours = [[0] + [customer.index for customer in tour] + [0] for tour in vehicle_tours]
     return (obj, vehicle_tours)
 
 
