@@ -16,12 +16,12 @@ class DistanceMatrix:
     def __init__(self, points):
         self._points = points
         l = len(points)
-        self._distances = array.array('I', [65535] * (l*(l+1)/2))
+        self._distances = [-1 for i in range(l*(l+1)/2)]
 
     def _distance(self, i,j):
         return self._distanceP(self._points[i], self._points[j])
     
-    def _distanceP(p0, p1):
+    def _distanceP(self, p0, p1):
         return math.sqrt((p0.x - p1.x)**2 + (p0.y - p1.y)**2) * 100
 
     def _distanceBuffered(self, i, j):
@@ -29,7 +29,7 @@ class DistanceMatrix:
             i,j = j,i
         k = (i * (i + 1) / 2) + j        
         l = self._distances[k]
-        if l == 65535:
+        if l == -1:
             l = self._distance(i,j)
             self._distances[k] = l
         return l
@@ -52,8 +52,11 @@ def solve_routing(customers, customerCount, vehicleCount, vehicleCapacity):
 
     distanceMatrix = DistanceMatrix(customers)
 
+    print customerCount
+    print vehicleCount
+
     routing = pywrapcp.RoutingModel(customerCount, vehicleCount)
-    routing.UpdateTimeLimit(5 * 60000)
+    routing.UpdateTimeLimit(60 * 60000)
 
     parameters = pywrapcp.RoutingSearchParameters()
     # Setting first solution heuristic (cheapest addition).
@@ -75,25 +78,34 @@ def solve_routing(customers, customerCount, vehicleCount, vehicleCapacity):
     routing.AddDimension(capacity, 0, vehicleCapacity, True, "capacity")
 
 
-    #search_log = routing.solver().SearchLog(10000000, routing.CostVar())
-    #routing.AddSearchMonitor(search_log)
+    search_log = routing.solver().SearchLog(10000, routing.CostVar())
+    routing.AddSearchMonitor(search_log)
 
     assignment = routing.SolveWithParameters(parameters, None)
+
+    print assignment
 
     vehicle_tours = []
 
     for vehicle in range(vehicleCount):
 
-        solution = []
+        solution = [0]
 
         node = routing.Start(vehicle)
-        while not routing.IsEnd(node):
-            solution.append(node)
-            node = assignment.Value(routing.NextVar(node))
 
+        #skip empty route        
+        if not routing.IsEnd(assignment.Value(routing.NextVar(node))):
+            first = True
+            while not routing.IsEnd(node):
+                if not first: #first is the capacity left                
+                    solution.append(node)
+                first = False
+                node = assignment.Value(routing.NextVar(node))
+
+        solution.append(0)
         vehicle_tours.append(solution)
 
-    return (assignment.ObjectiveValue(), solution)
+    return (assignment.ObjectiveValue(), vehicle_tours)
 
 
 def solve_it(input_data):
@@ -126,6 +138,10 @@ def solve_it(input_data):
     outputData = str(obj) + ' ' + str(0) + '\n'
     for v in range(0, vehicle_count):
         outputData += ' '.join([str(customer_index) for customer_index in vehicle_tours[v]]) + '\n'
+
+    f = open("solution",'w')
+    f.write(outputData)
+    f.close()
 
     return outputData
 
