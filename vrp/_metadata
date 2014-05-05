@@ -1,0 +1,11 @@
+optimization-002
+Vehicle Routing
+6
+AbP3LXz3, ./data/vrp_16_3_1, solver.py, Vehicle Routing Problem 1
+qUskNlyI, ./data/vrp_26_8_1, solver.py, Vehicle Routing Problem 2
+WrJzs7t7, ./data/vrp_51_5_1, solver.py, Vehicle Routing Problem 3
+Fhfahwgd, ./data/vrp_101_10_1, solver.py, Vehicle Routing Problem 4
+i5cdcvuF, ./data/vrp_200_16_1, solver.py, Vehicle Routing Problem 5
+kIKqylL1, ./data/vrp_421_41_1, solver.py, Vehicle Routing Problem 6
+
+
