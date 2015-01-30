@@ -63,7 +63,7 @@ def submit():
     
     print '==\n==',metadata.name,'Solution Submission \n=='
 
-    (login, password) = ("triforcexp@gmail.com", "")
+    (login, password) = ("", "")
     if not login:
         print '!! Submission Cancelled'
         return
